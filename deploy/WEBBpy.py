@@ -4,6 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+import os
 
 # Cấu hình trang
 st.set_page_config(page_title="Hệ thống gợi ý phim", page_icon="🎬", layout="wide")
@@ -12,27 +13,64 @@ st.set_page_config(page_title="Hệ thống gợi ý phim", page_icon="🎬", la
 @st.cache_data
 def load_data():
     try:
-        # Đọc dữ liệu phim - cập nhật để đọc từ 210.csv
-        try:
-            df = pd.read_csv('210.csv')
-            # Set index nếu có cột 'Thứ hạng' hoặc 'Thứ Hạng'
-            if 'Thứ hạng' in df.columns:
-                df.set_index('Thứ hạng', inplace=True)
-            elif 'Thứ Hạng' in df.columns:
-                df.set_index('Thứ Hạng', inplace=True)
-        except:
-            df = pd.read_csv('../films_vn_with_content.csv', index_col=0)
+        # Lấy đường dẫn thư mục hiện tại
+        current_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # Đọc similarity matrix nếu có
-        try:
-            sim_matrix = pd.read_csv('sim_matrix.csv', index_col=0)
-        except:
-            sim_matrix = None
+        # Đọc dữ liệu phim - thử nhiều đường dẫn
+        df = None
+        sim_matrix = None
+
+        # Danh sách các đường dẫn có thể cho file CSV
+        csv_paths = [
+            '210.csv',  # Cùng thư mục với script (cho Streamlit Cloud)
+            os.path.join(current_dir, '210.csv'),  # Đường dẫn tuyệt đối
+            '../films_vn_with_content.csv',  # Fallback 1
+            os.path.join(current_dir, '..', 'films_vn_with_content.csv')  # Fallback 2
+        ]
+
+        # Thử đọc file CSV từ các đường dẫn
+        for path in csv_paths:
+            try:
+                if os.path.exists(path):
+                    df = pd.read_csv(path)
+                    st.sidebar.success(f"✅ Đã tải dữ liệu từ: {os.path.basename(path)}")
+                    # Set index nếu có cột 'Thứ hạng' hoặc 'Thứ Hạng'
+                    if 'Thứ hạng' in df.columns:
+                        df.set_index('Thứ hạng', inplace=True)
+                    elif 'Thứ Hạng' in df.columns:
+                        df.set_index('Thứ Hạng', inplace=True)
+                    break
+            except Exception as e:
+                continue
+
+        if df is None:
+            st.error(f"❌ Không tìm thấy file dữ liệu phim. Đã thử: {csv_paths}")
+            return None, None
+
+        # Đọc similarity matrix - thử nhiều đường dẫn
+        sim_paths = [
+            'sim_matrix.csv',  # Cùng thư mục với script (cho Streamlit Cloud)
+            os.path.join(current_dir, 'sim_matrix.csv'),  # Đường dẫn tuyệt đối
+            '../sim_matrix.csv',  # Fallback 1
+            os.path.join(current_dir, '..', 'sim_matrix.csv')  # Fallback 2
+        ]
+
+        for path in sim_paths:
+            try:
+                if os.path.exists(path):
+                    sim_matrix = pd.read_csv(path, index_col=0)
+                    st.sidebar.success(f"✅ Đã tải similarity matrix")
+                    break
+            except Exception as e:
+                continue
+
+        if sim_matrix is None:
+            st.sidebar.warning("⚠️ Không tìm thấy similarity matrix, sẽ tính toán khi cần")
 
         return df, sim_matrix
-    except:
-        # Fallback nếu không tìm thấy file
-        st.error("Không tìm thấy file dữ liệu. Vui lòng kiểm tra đường dẫn.")
+
+    except Exception as e:
+        st.error(f"❌ Lỗi khi tải dữ liệu: {str(e)}")
         return None, None
 
 df, sim_matrix = load_data()
@@ -149,6 +187,33 @@ menu = st.sidebar.radio(
     "📌 Menu điều hướng",
     ["🏠 Trang chủ", "🎯 Gợi ý phim", "⭐ Phim hay", "📊 Phân cụm phim"]
 )
+
+# Thông tin nhóm
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 👥 Thông tin nhóm")
+st.sidebar.markdown("""
+<div style='background: linear-gradient(145deg, #1e1e1e, #2d2d2d); padding: 15px; border-radius: 10px;'>
+    <p style='margin: 5px 0; font-size: 14px;'>
+        <strong>🎓 Vũ Minh Đức</strong><br/>
+        <span style='color: #aaa;'>MSSV: 23110094</span>
+    </p>
+    <hr style='border: 0.5px solid #444; margin: 10px 0;'/>
+    <p style='margin: 5px 0; font-size: 14px;'>
+        <strong>🎓 Đinh Xuân Huy</strong><br/>
+        <span style='color: #aaa;'>MSSV: 23110102</span>
+    </p>
+    <hr style='border: 0.5px solid #444; margin: 10px 0;'/>
+    <p style='margin: 5px 0; font-size: 14px;'>
+        <strong>🎓 Trần Minh Huy</strong><br/>
+        <span style='color: #aaa;'>MSSV: 23110106</span>
+    </p>
+    <hr style='border: 0.5px solid #444; margin: 10px 0;'/>
+    <p style='margin: 5px 0; font-size: 14px;'>
+        <strong>🎓 Nguyễn Đức Thịnh</strong><br/>
+        <span style='color: #aaa;'>MSSV: 23110156</span>
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 # Trang chủ
 if menu == "🏠 Trang chủ":
@@ -506,7 +571,15 @@ elif menu == "📊 Phân cụm phim":
 st.markdown("---")
 st.markdown("""
     <div style='text-align:center; color:#888; padding: 20px;'>
-        <p>🎬 Hệ thống Gợi ý Phim Việt Nam | Powered by Machine Learning & AI</p>
-        <p>Sử dụng TF-IDF, Cosine Similarity và K-Means Clustering</p>
+        <p style='font-size: 18px; margin-bottom: 10px;'>🎬 <strong>Hệ thống Gợi ý Phim Việt Nam</strong> | Powered by Machine Learning & AI</p>
+        <p style='margin-bottom: 15px;'>Sử dụng TF-IDF, Cosine Similarity và K-Means Clustering</p>
+        <hr style='border: 0.5px solid #444; width: 50%; margin: 20px auto;'/>
+        <p style='font-size: 16px; color: #E50914; margin-bottom: 10px;'><strong>👥 Nhóm thực hiện</strong></p>
+        <div style='display: inline-block; text-align: left;'>
+            <p style='margin: 5px 0;'>🎓 <strong>Vũ Minh Đức</strong> - MSSV: 23110094</p>
+            <p style='margin: 5px 0;'>🎓 <strong>Đinh Xuân Huy</strong> - MSSV: 23110102</p>
+            <p style='margin: 5px 0;'>🎓 <strong>Trần Minh Huy</strong> - MSSV: 23110106</p>
+            <p style='margin: 5px 0;'>🎓 <strong>Nguyễn Đức Thịnh</strong> - MSSV: 23110156</p>
+        </div>
     </div>
 """, unsafe_allow_html=True)
