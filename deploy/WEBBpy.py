@@ -401,20 +401,42 @@ elif menu == "🎯 Gợi ý phim":
                         # Sử dụng similarity matrix đã có
                         movie_title = get_field(selected_movie, ['Phim', 'Tên Phim', 'title'])
                         if movie_title in sim_matrix.columns:
-                            similarities = sim_matrix[movie_title].sort_values()
-                            similar_movies = similarities[1:6]  # Top 5, bỏ chính nó
+                            # sim_matrix lưu distance (1 - cosine_similarity)
+                            # → Càng nhỏ càng giống, sắp xếp ASCENDING (tăng dần)
+                            distances = pd.to_numeric(sim_matrix[movie_title], errors='coerce').fillna(1.0)
+                            distances = distances.sort_values(ascending=True)  # Sắp xếp tăng dần
+                            similar_movies = distances.iloc[1:6]  # Top 5, bỏ chính nó (vị trí 0)
 
-                            for i, (movie, score) in enumerate(similar_movies.items(), 1):
+                            st.info(f"🔍 Đang sử dụng Distance Matrix (1 - Cosine Similarity)")
+
+                            for i, (movie, distance) in enumerate(similar_movies.items(), 1):
                                 similar_film = df[df[movie_col] == movie]
                                 if not similar_film.empty:
                                     similar_film = similar_film.iloc[0]
-                                    similarity_percent = (1 - score) * 100
+
+                                    # Chuyển distance thành similarity %
+                                    similarity_percent = (1 - distance) * 100
+
+                                    # Màu sắc dựa trên độ tương đồng
+                                    if similarity_percent >= 80:
+                                        color = "#00C851"  # Xanh lá - Rất giống
+                                    elif similarity_percent >= 60:
+                                        color = "#FFB300"  # Vàng - Khá giống
+                                    else:
+                                        color = "#FF4444"  # Đỏ - Ít giống
 
                                     with st.container():
                                         st.markdown(f"""
                                             <div class='movie-card'>
                                                 <h4 style='color: #E50914;'>{i}. {movie}</h4>
-                                                <p><strong>📊 Độ tương đồng:</strong> {similarity_percent:.1f}%</p>
+                                                <p><strong>📊 Độ tương đồng:</strong> 
+                                                    <span style='color:{color}; font-size:20px; font-weight:bold;'>
+                                                        {similarity_percent:.1f}%
+                                                    </span>
+                                                </p>
+                                                <p style='color: #888; font-size: 12px;'>
+                                                    (Distance: {distance:.4f} | Similarity: {1-distance:.4f})
+                                                </p>
                                                 <p><strong>📅 Năm:</strong> {get_field(similar_film, ['Năm', 'year'])}</p>
                                                 <p><strong>🎭 Đạo diễn:</strong> {get_field(similar_film, ['Đạo diễn', 'director'])}</p>
                                             </div>
@@ -427,22 +449,39 @@ elif menu == "🎯 Gợi ý phim":
                                                 st.write(content)
                                         st.markdown("---")
                         else:
-                            st.warning("Không tìm thấy thông tin similarity cho phim này trong ma trận")
+                            st.warning(f"⚠️ Không tìm thấy phim '{movie_title}' trong ma trận similarity")
 
                     elif similarity_matrix_computed is not None:
-                        # Sử dụng similarity matrix vừa tính
+                        # Sử dụng similarity matrix vừa tính (đây là cosine similarity thuần)
+                        st.info("🔍 Đang sử dụng Cosine Similarity (tính toán trực tiếp)")
                         similarities = similarity_matrix_computed[selected_idx]
                         similar_indices = np.argsort(similarities)[::-1][1:6]  # Top 5, bỏ chính nó
 
                         for i, idx in enumerate(similar_indices, 1):
                             similar_film = df.iloc[idx]
-                            similarity_percent = similarities[idx] * 100
+                            similarity_score = similarities[idx]
+                            similarity_percent = similarity_score * 100
+
+                            # Màu sắc
+                            if similarity_percent >= 80:
+                                color = "#00C851"
+                            elif similarity_percent >= 60:
+                                color = "#FFB300"
+                            else:
+                                color = "#FF4444"
 
                             with st.container():
                                 st.markdown(f"""
                                     <div class='movie-card'>
-                                        <h4 style='color: #E50914;'>{i}. {get_field(similar_film, ['Phim', 'Tên Phim', 'title'])}</h4>
-                                        <p><strong>📊 Độ tương đồng:</strong> {similarity_percent:.1f}%</p>
+                                        <h4 style='color: #E50914;'>{i}. {get_field(similar_film, ['Phim', 'Tén Phim', 'title'])}</h4>
+                                        <p><strong>📊 Độ tương đồng:</strong> 
+                                            <span style='color:{color}; font-size:20px; font-weight:bold;'>
+                                                {similarity_percent:.1f}%
+                                            </span>
+                                        </p>
+                                        <p style='color: #888; font-size: 12px;'>
+                                            (Cosine Similarity: {similarity_score:.4f})
+                                        </p>
                                         <p><strong>📅 Năm:</strong> {get_field(similar_film, ['Năm', 'year'])}</p>
                                         <p><strong>🎭 Đạo diễn:</strong> {get_field(similar_film, ['Đạo diễn', 'director'])}</p>
                                     </div>
@@ -465,25 +504,78 @@ elif menu == "🎯 Gợi ý phim":
                         same_cluster_films = df[df['cluster'] == cluster_value]
                         same_cluster_films = same_cluster_films[same_cluster_films.index != selected_idx]
 
-                        st.info(f"🎯 Cụm #{cluster_value} có {len(same_cluster_films)} phim tương tự")
+                        # 🆕 Tính độ tương đồng % cho các phim cùng cụm
+                        if similarity_matrix_computed is not None:
+                            st.info(f"🎯 Cụm #{cluster_value} có {len(same_cluster_films)} phim (hiển thị top 10 theo độ tương đồng)")
 
-                        for i, (idx, film) in enumerate(same_cluster_films.head(10).iterrows(), 1):
-                            with st.container():
-                                st.markdown(f"""
-                                    <div class='movie-card'>
-                                        <h4 style='color: #E50914;'>{i}. {get_field(film, ['Phim', 'Tên Phim', 'title'])}</h4>
-                                        <p><strong>🎯 Cụm:</strong> {cluster_value}</p>
-                                        <p><strong>📅 Năm:</strong> {get_field(film, ['Năm', 'year'])}</p>
-                                        <p><strong>🎭 Đạo diễn:</strong> {get_field(film, ['Đạo diễn', 'director'])}</p>
-                                    </div>
-                                """, unsafe_allow_html=True)
+                            similarities = similarity_matrix_computed[selected_idx]
 
-                                content = get_field(film, ['Content', 'Nội dung'])
-                                st.write(snippet(content, 200))
-                                if isinstance(content, str) and content.strip():
-                                    with st.expander("📖 Đọc thêm"):
-                                        st.write(content)
-                                st.markdown("---")
+                            # Lọc phim cùng cụm và tạo list (index, similarity)
+                            cluster_similarities = []
+                            for idx in same_cluster_films.index:
+                                if idx < len(similarities):
+                                    score = similarities[idx]
+                                    if score > 0:
+                                        cluster_similarities.append((idx, score))
+
+                            # Sắp xếp theo độ tương đồng giảm dần
+                            cluster_similarities.sort(key=lambda x: x[1], reverse=True)
+
+                            # Hiển thị top 10
+                            for i, (idx, score) in enumerate(cluster_similarities[:10], 1):
+                                film = df.iloc[idx]
+                                similarity_percent = score * 100
+
+                                # Màu sắc
+                                if similarity_percent >= 80:
+                                    color = "#00C851"
+                                elif similarity_percent >= 60:
+                                    color = "#FFB300"
+                                else:
+                                    color = "#FF4444"
+
+                                with st.container():
+                                    st.markdown(f"""
+                                        <div class='movie-card'>
+                                            <h4 style='color: #E50914;'>{i}. {get_field(film, ['Phim', 'Tên Phim', 'title'])}</h4>
+                                            <p><strong>📊 Độ tương đồng:</strong> 
+                                                <span style='color:{color}; font-size:20px; font-weight:bold;'>
+                                                    {similarity_percent:.1f}%
+                                                </span>
+                                            </p>
+                                            <p><strong>🎯 Cụm:</strong> {cluster_value}</p>
+                                            <p><strong>📅 Năm:</strong> {get_field(film, ['Năm', 'year'])}</p>
+                                            <p><strong>🎭 Đạo diễn:</strong> {get_field(film, ['Đạo diễn', 'director'])}</p>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+
+                                    content = get_field(film, ['Content', 'Nội dung'])
+                                    st.write(snippet(content, 200))
+                                    if isinstance(content, str) and content.strip():
+                                        with st.expander("📖 Đọc thêm"):
+                                            st.write(content)
+                                    st.markdown("---")
+                        else:
+                            # Fallback: Hiển thị không có điểm %
+                            st.info(f"🎯 Cụm #{cluster_value} có {len(same_cluster_films)} phim tương tự")
+
+                            for i, (idx, film) in enumerate(same_cluster_films.head(10).iterrows(), 1):
+                                with st.container():
+                                    st.markdown(f"""
+                                        <div class='movie-card'>
+                                            <h4 style='color: #E50914;'>{i}. {get_field(film, ['Phim', 'Tên Phim', 'title'])}</h4>
+                                            <p><strong>🎯 Cụm:</strong> {cluster_value}</p>
+                                            <p><strong>📅 Năm:</strong> {get_field(film, ['Năm', 'year'])}</p>
+                                            <p><strong>🎭 Đạo diễn:</strong> {get_field(film, ['Đạo diễn', 'director'])}</p>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+
+                                    content = get_field(film, ['Content', 'Nội dung'])
+                                    st.write(snippet(content, 200))
+                                    if isinstance(content, str) and content.strip():
+                                        with st.expander("📖 Đọc thêm"):
+                                            st.write(content)
+                                    st.markdown("---")
                     else:
                         st.error("Chưa có dữ liệu phân cụm")
 
