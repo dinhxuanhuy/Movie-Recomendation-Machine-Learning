@@ -101,6 +101,45 @@ def get_field(row, candidates):
                 return val
     return 'Không có'
 
+def get_similarity_color(rank, total=5):
+    """
+    Trả về màu gradient dựa trên xếp hạng
+    Rank 1 (cao nhất) = màu đỏ đậm
+    Rank cuối = màu cam nhạt
+    """
+    colors = [
+        '#FF0000',  # Rank 1: Đỏ rực
+        '#FF3333',  # Rank 2: Đỏ vừa
+        '#FF6666',  # Rank 3: Đỏ nhạt
+        '#FF9966',  # Rank 4: Cam đỏ
+        '#FFCC99',  # Rank 5: Cam nhạt
+    ]
+    return colors[min(rank-1, len(colors)-1)]
+
+def get_similarity_badge(rank, similarity_percent):
+    """
+    Tạo badge hiển thị xếp hạng với màu sắc
+    """
+    color = get_similarity_color(rank)
+    badges = {
+        1: '🥇',
+        2: '🥈', 
+        3: '🥉',
+        4: '🎖️',
+        5: '🏅'
+    }
+    badge = badges.get(rank, '⭐')
+    
+    return f"""
+    <div style='display: inline-block; background: linear-gradient(135deg, {color}, {color}88); 
+                padding: 8px 15px; border-radius: 20px; margin: 5px 0;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);'>
+        <span style='font-size: 18px;'>{badge}</span>
+        <span style='color: white; font-weight: bold; margin-left: 5px;'>Xếp hạng #{rank}</span>
+        <span style='color: white; margin-left: 10px;'>📊 {similarity_percent:.1f}%</span>
+    </div>
+    """
+
 # Tạo TF-IDF và clustering
 @st.cache_resource
 def create_models(df):
@@ -287,6 +326,7 @@ elif menu == "🎯 Gợi ý phim":
             method = st.radio(
                 "🔧 Chọn phương pháp gợi ý:",
                 ["📊 Similarity Matrix (Độ tương đồng)", "🎯 Clustering (Phân cụm)"],
+                index=0,  # Mặc định chọn Similarity Matrix
                 help="Similarity Matrix: Dựa trên độ tương đồng nội dung\nClustering: Dựa trên nhóm phim có chủ đề giống nhau"
             )
 
@@ -396,6 +436,7 @@ elif menu == "🎯 Gợi ý phim":
                 # Gợi ý theo phương pháp được chọn
                 if "Similarity Matrix" in method:
                     st.markdown("### 🎯 Các phim tương tự (dựa trên Similarity Matrix)")
+                    st.markdown("*Phim được xếp hạng theo độ tương đồng cao nhất, với màu sắc thể hiện mức độ liên quan*")
 
                     if sim_matrix is not None and not sim_matrix.empty:
                         # Sử dụng similarity matrix đã có
@@ -409,12 +450,16 @@ elif menu == "🎯 Gợi ý phim":
                                 if not similar_film.empty:
                                     similar_film = similar_film.iloc[0]
                                     similarity_percent = (1 - score) * 100
+                                    
+                                    # Lấy màu và badge theo xếp hạng
+                                    color = get_similarity_color(i)
+                                    badge_html = get_similarity_badge(i, similarity_percent)
 
                                     with st.container():
+                                        st.markdown(badge_html, unsafe_allow_html=True)
                                         st.markdown(f"""
-                                            <div class='movie-card'>
-                                                <h4 style='color: #E50914;'>{i}. {movie}</h4>
-                                                <p><strong>📊 Độ tương đồng:</strong> {similarity_percent:.1f}%</p>
+                                            <div class='movie-card' style='border-left: 4px solid {color};'>
+                                                <h4 style='color: {color};'>{movie}</h4>
                                                 <p><strong>📅 Năm:</strong> {get_field(similar_film, ['Năm', 'year'])}</p>
                                                 <p><strong>🎭 Đạo diễn:</strong> {get_field(similar_film, ['Đạo diễn', 'director'])}</p>
                                             </div>
@@ -437,14 +482,19 @@ elif menu == "🎯 Gợi ý phim":
                         for i, idx in enumerate(similar_indices, 1):
                             similar_film = df.iloc[idx]
                             similarity_percent = similarities[idx] * 100
+                            
+                            # Lấy màu và badge theo xếp hạng
+                            color = get_similarity_color(i)
+                            badge_html = get_similarity_badge(i, similarity_percent)
 
                             with st.container():
+                                st.markdown(badge_html, unsafe_allow_html=True)
                                 st.markdown(f"""
-                                    <div class='movie-card'>
-                                        <h4 style='color: #E50914;'>{i}. {get_field(similar_film, ['Phim', 'Tên Phim', 'title'])}</h4>
-                                        <p><strong>📊 Độ tương đồng:</strong> {similarity_percent:.1f}%</p>
-                                        <p><strong>📅 Năm:</strong> {get_field(similar_film, ['Năm', 'year'])}</p>
+                                    <div class='movie-card' style='border-left: 4px solid {color};'>
+                                        <h4 style='color: {color};'>{get_field(similar_film, ['Phim', 'Tên Phim', 'title'])}</h4>
+                                        <p><strong>� Năm:</strong> {get_field(similar_film, ['Năm', 'year'])}</p>
                                         <p><strong>🎭 Đạo diễn:</strong> {get_field(similar_film, ['Đạo diễn', 'director'])}</p>
+                                        <p><strong>� Cụm:</strong> {get_field(similar_film, ['cluster'])}</p>
                                     </div>
                                 """, unsafe_allow_html=True)
 
@@ -522,48 +572,107 @@ elif menu == "⭐ Phim hay":
 # Phân cụm phim
 elif menu == "📊 Phân cụm phim":
     st.markdown("<h1 style='text-align:center; color:#E50914;'>📊 PHÂN CỤM NỘI DUNG PHIM</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#aaa;'>Phân loại phim theo chủ đề và nội dung tương tự bằng thuật toán K-Means Clustering</p>", unsafe_allow_html=True)
     st.markdown("---")
 
     if df is not None and 'cluster' in df.columns:
-        st.markdown("### 📈 Thống kê phân cụm")
-
+        # Thống kê tổng quan
         cluster_counts = df['cluster'].value_counts().sort_index()
+        total_films = len(df)
+        num_clusters = len(cluster_counts)
+        
+        # Hiển thị metrics tổng quan
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📊 Tổng số phim", total_films)
+        with col2:
+            st.metric("🎯 Số cụm", num_clusters)
+        with col3:
+            avg_films_per_cluster = total_films / num_clusters
+            st.metric("📈 Trung bình/cụm", f"{avg_films_per_cluster:.1f}")
+        
+        st.markdown("---")
+        st.markdown("### 📈 Biểu đồ phân bố phim theo cụm")
 
         col1, col2 = st.columns([2, 1])
         with col1:
             st.bar_chart(cluster_counts)
         with col2:
             st.markdown("#### 📊 Số lượng phim theo cụm")
-            for cluster, count in cluster_counts.items():
-                st.metric(f"Cụm {cluster}", f"{count} phim")
-
-        st.markdown("---")
-        st.markdown("### 🎯 Xem phim theo cụm")
-
-        selected_cluster = st.selectbox(
-            "Chọn cụm để xem danh sách phim:",
-            options=sorted(df['cluster'].unique())
-        )
-
-        cluster_films = df[df['cluster'] == selected_cluster]
-        st.info(f"🎬 Cụm #{selected_cluster} có {len(cluster_films)} phim")
-
-        cols = st.columns(2)
-        for i, (idx, film) in enumerate(cluster_films.iterrows()):
-            with cols[i % 2]:
+            
+            # Tạo màu cho từng cụm
+            cluster_colors = ['#FF0000', '#FF6600', '#FFCC00', '#00FF00', '#0066FF', '#9900FF', '#FF00FF', '#00FFFF']
+            
+            for cluster in sorted(cluster_counts.index):
+                count = cluster_counts[cluster]
+                percent = (count / total_films) * 100
+                color = cluster_colors[cluster % len(cluster_colors)]
+                
                 st.markdown(f"""
-                    <div class='movie-card'>
-                        <h4 style='color: #E50914;'>{get_field(film, ['Phim', 'Tên Phim', 'title'])}</h4>
-                        <p><strong>📅 Năm:</strong> {get_field(film, ['Năm', 'year'])}</p>
-                        <p><strong>🎭 Đạo diễn:</strong> {get_field(film, ['Đạo diễn', 'director'])}</p>
+                    <div style='background: linear-gradient(90deg, {color}44, {color}11); 
+                                padding: 10px; border-radius: 8px; margin: 5px 0;
+                                border-left: 4px solid {color};'>
+                        <strong style='color: {color};'>Cụm {cluster}:</strong> 
+                        <span style='color: white;'>{count} phim ({percent:.1f}%)</span>
                     </div>
                 """, unsafe_allow_html=True)
 
-                content = get_field(film, ['Content', 'Nội dung'])
-                st.write(snippet(content, 150))
-                if isinstance(content, str) and content.strip():
-                    with st.expander("📖 Đọc thêm"):
-                        st.write(content)
+        st.markdown("---")
+        st.markdown("### 🎯 Xem chi tiết phim theo cụm")
+
+        # Tạo tabs cho từng cụm thay vì selectbox
+        tabs = st.tabs([f"🎯 Cụm {i}" for i in sorted(df['cluster'].unique())])
+        
+        for idx, tab in enumerate(tabs):
+            with tab:
+                cluster_value = sorted(df['cluster'].unique())[idx]
+                cluster_films = df[df['cluster'] == cluster_value]
+                
+                # Thống kê cụm
+                color = cluster_colors[cluster_value % len(cluster_colors)]
+                st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, {color}33, {color}11); 
+                                padding: 20px; border-radius: 15px; margin: 10px 0;
+                                border: 2px solid {color};'>
+                        <h3 style='color: {color}; margin: 0;'>🎬 Cụm #{cluster_value}</h3>
+                        <p style='color: white; margin: 10px 0;'>
+                            <strong>{len(cluster_films)} phim</strong> trong cụm này 
+                            ({(len(cluster_films)/total_films*100):.1f}% tổng số phim)
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Phân tích cụm
+                if 'Nhóm' in cluster_films.columns:
+                    nhom_counts = cluster_films['Nhóm'].value_counts()
+                    st.markdown(f"**📊 Phân bố theo nhóm thể loại:**")
+                    cols_nhom = st.columns(min(3, len(nhom_counts)))
+                    for i, (nhom, count) in enumerate(nhom_counts.items()):
+                        with cols_nhom[i % 3]:
+                            st.info(f"Nhóm {nhom}: {count} phim")
+                
+                st.markdown("---")
+                
+                # Hiển thị danh sách phim
+                st.markdown(f"#### 🎥 Danh sách {len(cluster_films)} phim trong cụm:")
+                
+                cols = st.columns(2)
+                for i, (idx, film) in enumerate(cluster_films.iterrows()):
+                    with cols[i % 2]:
+                        st.markdown(f"""
+                            <div class='movie-card' style='border-left: 4px solid {color};'>
+                                <h4 style='color: {color};'>{get_field(film, ['Phim', 'Tên Phim', 'title'])}</h4>
+                                <p><strong>📅 Năm:</strong> {get_field(film, ['Năm', 'year'])}</p>
+                                <p><strong>🎭 Đạo diễn:</strong> {get_field(film, ['Đạo diễn', 'director'])}</p>
+                                <p><strong>🏷️ Nhóm:</strong> {get_field(film, ['Nhóm', 'Group'])}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        content = get_field(film, ['Content', 'Nội dung'])
+                        st.write(snippet(content, 150))
+                        if isinstance(content, str) and content.strip():
+                            with st.expander("📖 Đọc thêm"):
+                                st.write(content)
     else:
         st.error("Chưa có dữ liệu phân cụm")
 
