@@ -13,27 +13,39 @@ st.set_page_config(page_title="Hệ thống gợi ý phim", page_icon="🎬", la
 @st.cache_data
 def load_data():
     try:
-        # Lấy đường dẫn thư mục hiện tại
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Lấy đường dẫn thư mục hiện tại (thư mục chứa file WEBBpy.py)
+        current_dir = os.path.dirname(os.path.abspath(__file__)) if os.path.dirname(os.path.abspath(__file__)) else os.getcwd()
 
         # Đọc dữ liệu phim - thử nhiều đường dẫn
         df = None
         sim_matrix = None
 
-        # Danh sách các đường dẫn có thể cho file CSV
+        # Danh sách các đường dẫn có thể cho file 210.csv (ƯU TIÊN CHO STREAMLIT CLOUD)
         csv_paths = [
-            '210.csv',  # Cùng thư mục với script (cho Streamlit Cloud)
-            os.path.join(current_dir, '210.csv'),  # Đường dẫn tuyệt đối
-            '../films_vn_with_content.csv',  # Fallback 1
-            os.path.join(current_dir, '..', 'films_vn_with_content.csv')  # Fallback 2
+            os.path.join(current_dir, '210.csv'),  # Đường dẫn tuyệt đối (ƯU TIÊN)
+            '210.csv',  # Relative path (cho Streamlit Cloud)
+            os.path.join(os.getcwd(), '210.csv'),  # Current working directory
+            os.path.join(current_dir, '..', '210.csv'),  # Thư mục cha
+            '../210.csv',  # Fallback
+            'films_vn_with_content.csv',  # Tên file cũ
+            '../films_vn_with_content.csv',  # Fallback file cũ
+            os.path.join(current_dir, '..', 'films_vn_with_content.csv')
         ]
 
         # Thử đọc file CSV từ các đường dẫn
         for path in csv_paths:
             try:
                 if os.path.exists(path):
-                    df = pd.read_csv(path)
+                    df = pd.read_csv(path, encoding='utf-8')
                     st.sidebar.success(f"✅ Đã tải dữ liệu từ: {os.path.basename(path)}")
+                    st.sidebar.info(f"📂 Đường dẫn: {os.path.abspath(path)}")
+                    
+                    # Kiểm tra cột cluster (quan trọng cho phân cụm)
+                    if 'cluster' in df.columns:
+                        st.sidebar.success(f"✅ Có dữ liệu phân cụm: {df['cluster'].nunique()} cụm")
+                    else:
+                        st.sidebar.warning("⚠️ Không có cột 'cluster' - Phân cụm có thể không hoạt động")
+                    
                     # Set index nếu có cột 'Thứ hạng' hoặc 'Thứ Hạng'
                     if 'Thứ hạng' in df.columns:
                         df.set_index('Thứ hạng', inplace=True)
@@ -44,22 +56,30 @@ def load_data():
                 continue
 
         if df is None:
-            st.error(f"❌ Không tìm thấy file dữ liệu phim. Đã thử: {csv_paths}")
+            st.error(f"❌ Không tìm thấy file dữ liệu phim!")
+            st.error(f"📂 Thư mục hiện tại: {current_dir}")
+            st.error(f"📋 Danh sách file trong thư mục:")
+            try:
+                files = os.listdir(current_dir)
+                st.write(files)
+            except:
+                pass
             return None, None
 
-        # Đọc similarity matrix - thử nhiều đường dẫn
+        # Đọc similarity matrix - thử nhiều đường dẫn (ƯU TIÊN CHO STREAMLIT CLOUD)
         sim_paths = [
-            'sim_matrix.csv',  # Cùng thư mục với script (cho Streamlit Cloud)
-            os.path.join(current_dir, 'sim_matrix.csv'),  # Đường dẫn tuyệt đối
-            '../sim_matrix.csv',  # Fallback 1
-            os.path.join(current_dir, '..', 'sim_matrix.csv')  # Fallback 2
+            os.path.join(current_dir, 'sim_matrix.csv'),  # Đường dẫn tuyệt đối (ƯU TIÊN)
+            'sim_matrix.csv',  # Relative path (cho Streamlit Cloud)
+            os.path.join(os.getcwd(), 'sim_matrix.csv'),  # Current working directory
+            os.path.join(current_dir, '..', 'sim_matrix.csv'),  # Thư mục cha
+            '../sim_matrix.csv'  # Fallback
         ]
 
         for path in sim_paths:
             try:
                 if os.path.exists(path):
-                    sim_matrix = pd.read_csv(path, index_col=0)
-                    st.sidebar.success(f"✅ Đã tải similarity matrix")
+                    sim_matrix = pd.read_csv(path, index_col=0, encoding='utf-8')
+                    st.sidebar.success(f"✅ Đã tải similarity matrix từ file")
                     break
             except Exception as e:
                 continue
@@ -71,6 +91,8 @@ def load_data():
 
     except Exception as e:
         st.error(f"❌ Lỗi khi tải dữ liệu: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None, None
 
 df, sim_matrix = load_data()

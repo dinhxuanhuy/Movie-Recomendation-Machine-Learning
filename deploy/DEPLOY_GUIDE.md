@@ -2,17 +2,30 @@
 
 ## 📋 Chuẩn bị trước khi deploy
 
-### 1. Cấu trúc thư mục cần có:
+### 1. Cấu trúc thư mục cần có (QUAN TRỌNG):
 ```
 deploy/
 ├── WEBBpy.py           # File chính của ứng dụng
-├── 210.csv             # Dữ liệu phim
-├── sim_matrix.csv      # Ma trận độ tương đồng
+├── 210.csv             # Dữ liệu 210 phim (BẮT BUỘC - có cột 'cluster')
+├── sim_matrix.csv      # Ma trận độ tương đồng (BẮT BUỘC)
 ├── requirements.txt    # Các thư viện cần thiết
 └── README.md          # Tài liệu hướng dẫn
 ```
 
-### 2. Kiểm tra file requirements.txt:
+**⚠️ LƯU Ý QUAN TRỌNG:**
+- File `210.csv` PHẢI có cột `cluster` (giá trị 0-6) để chức năng **Phân cụm** hoạt động
+- File `sim_matrix.csv` PHẢI có để chức năng **Similarity Matrix** hoạt động
+- Cả 3 file (WEBBpy.py, 210.csv, sim_matrix.csv) phải cùng nằm trong 1 thư mục
+
+### 2. Kiểm tra file 210.csv:
+```python
+import pandas as pd
+df = pd.read_csv('210.csv')
+print(df.columns)  # Phải có cột: 'Tên Phim', 'Năm', 'Đạo diễn', 'Nội dung', 'cluster'
+print(df['cluster'].unique())  # Phải có các giá trị: [0, 1, 2, 3, 4, 5, 6]
+```
+
+### 3. Kiểm tra file requirements.txt:
 ```txt
 streamlit>=1.28.0
 pandas>=2.0.0
@@ -102,19 +115,47 @@ git push -u origin main
 
 ## 🐛 Xử lý lỗi thường gặp
 
-### Lỗi 1: "Không tìm thấy file dữ liệu"
-**Nguyên nhân**: File CSV không có trong repo
+### Lỗi 1: "Không tìm thấy file dữ liệu" hoặc "Không có dữ liệu phân cụm"
+**Nguyên nhân**: File CSV không có trong repo hoặc sai cấu trúc thư mục
 
 **Giải pháp**:
-1. Kiểm tra file `210.csv` và `sim_matrix.csv` đã được upload lên GitHub chưa
-2. Vào repo trên GitHub, kiểm tra file có trong danh sách không
-3. Nếu thiếu, upload lại file:
+
+1. **Kiểm tra cấu trúc thư mục trên GitHub:**
+   - Vào repo trên GitHub
+   - Đảm bảo có 3 file cùng cấp: `WEBBpy.py`, `210.csv`, `sim_matrix.csv`
+   - **KHÔNG** đặt file CSV trong thư mục con
+   
+2. **Kiểm tra file 210.csv có cột cluster:**
+   ```python
+   # Mở file 210.csv, kiểm tra có cột 'cluster' không
+   import pandas as pd
+   df = pd.read_csv('210.csv')
+   print(df.columns)  # Phải thấy 'cluster' trong danh sách
+   print(df['cluster'].value_counts())  # Phải có các giá trị 0-6
+   ```
+
+3. **Nếu thiếu file, upload lại:**
    ```bash
-   git add 210.csv sim_matrix.csv
-   git commit -m "Add data files"
+   cd D:\DaiHoc\BasicPython\Movie_Recommendation_system_project\deploy
+   
+   # Kiểm tra file có đúng chưa
+   dir
+   
+   # Push lại lên GitHub
+   git add 210.csv sim_matrix.csv WEBBpy.py
+   git commit -m "Add data files with cluster column"
    git push
    ```
-4. Streamlit Cloud sẽ tự động redeploy
+
+4. **Trên Streamlit Cloud:**
+   - Vào App Settings → Reboot app
+   - Kiểm tra Logs xem có thông báo "✅ Đã tải dữ liệu từ: 210.csv" không
+   - Kiểm tra có thông báo "✅ Có dữ liệu phân cụm: 7 cụm" không
+
+5. **Nếu vẫn lỗi, kiểm tra đường dẫn:**
+   - Trong Streamlit Cloud logs, tìm dòng "📂 Đường dẫn:"
+   - Tìm dòng "📋 Danh sách file trong thư mục:"
+   - Xem file `210.csv` có trong danh sách không
 
 ### Lỗi 2: "ModuleNotFoundError"
 **Nguyên nhân**: Thiếu thư viện trong requirements.txt
@@ -135,13 +176,44 @@ git push -u origin main
    git push
    ```
 
-### Lỗi 3: App không load dữ liệu
-**Nguyên nhân**: Đường dẫn file không đúng
+### Lỗi 3: App không load dữ liệu hoặc "Không có cột cluster"
+**Nguyên nhân**: Đường dẫn file không đúng hoặc file CSV thiếu cột
 
-**Giải pháp**: Code đã được sửa để tự động tìm file ở nhiều vị trí:
-- Cùng thư mục với `WEBBpy.py` ✅ (đúng cho Streamlit Cloud)
-- Thư mục cha
-- Đường dẫn tuyệt đối
+**Giải pháp**:
+
+1. **Code đã được cải thiện** để tự động tìm file ở nhiều vị trí:
+   - `os.path.join(current_dir, '210.csv')` ✅ (ƯU TIÊN - cho Streamlit Cloud)
+   - `210.csv` ✅ (Relative path)
+   - `os.getcwd() + '/210.csv'` ✅ (Current working directory)
+   - Các fallback khác
+
+2. **Kiểm tra sidebar trên Streamlit Cloud:**
+   - Phải thấy: "✅ Đã tải dữ liệu từ: 210.csv"
+   - Phải thấy: "✅ Có dữ liệu phân cụm: 7 cụm"
+   - Phải thấy: "✅ Đã tải similarity matrix từ file"
+
+3. **Nếu thiếu cột cluster:**
+   - Mở file `210.csv` bằng Excel/Python
+   - Đảm bảo có cột tên `cluster` (chữ thường)
+   - Giá trị phải là số nguyên từ 0-6
+   - Save lại và push lên GitHub
+
+4. **Debug mode:**
+   - App sẽ tự động hiển thị thông tin debug trong sidebar
+   - Xem "📂 Đường dẫn" để biết file được load từ đâu
+   - Xem "📋 Danh sách file" để biết file nào có sẵn
+
+5. **Force reload:**
+   ```bash
+   # Local test trước
+   cd D:\DaiHoc\BasicPython\Movie_Recommendation_system_project\deploy
+   streamlit run WEBBpy.py
+   
+   # Nếu OK, push lên
+   git add .
+   git commit -m "Fix file paths for Streamlit Cloud"
+   git push
+   ```
 
 ### Lỗi 4: File CSV quá lớn (>100MB)
 **Nguyên nhân**: GitHub giới hạn file 100MB
